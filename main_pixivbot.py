@@ -114,12 +114,14 @@ def sendResult(update: Update, response, pid: str, results: List[BasicSauce]) ->
                                 "Network error, cannot send one illust")
                         except:
                             ...
-    elif len(results) > 0:
-        rttext = "Can't find from pixiv. Other sources:\n"+"\n".join(
-            [result.urls[0]+f" similarity:{result.similarity}" for result in results if len(result.urls) > 0])
-        update.message.reply_text(rttext)
-    else:
-        update.message.reply_text("no reslts")
+        return
+    if len(results) > 0:
+        rturls = "\n".join([result.urls[0]+f" similarity:{result.similarity}" for result in results if len(result.urls) > 0])
+        if rturls != "":
+            update.message.reply_text(
+                "Can't find from pixiv. Other sources:\n"+rturls)
+            return 
+    update.message.reply_text("no reslts")
 
 
 def photohandler(update: Update, context: CallbackContext) -> None:
@@ -127,14 +129,14 @@ def photohandler(update: Update, context: CallbackContext) -> None:
         return
     update.message.reply_text("Searching...")
 
-    sauce = SauceNao(api_key=sauceapikey)
+    sauce=SauceNao(api_key=sauceapikey)
 
-    tpfilepath = tgphoto(update)
+    tpfilepath=tgphoto(update)
 
     # Getting result from SauceNAO
     with open(tpfilepath, 'rb') as f:
         try:
-            response = sauce.from_file(f)
+            response=sauce.from_file(f)
         except:
             update.message.reply_text("Network error, please retry")
             return
@@ -143,17 +145,17 @@ def photohandler(update: Update, context: CallbackContext) -> None:
         update.message.reply_text("No results")
         return
 
-    pixivids, results = dataprocess(response)
+    pixivids, results=dataprocess(response)
 
-    response = None
+    response=None
 
     # Getting result from pixiv
-    pid = None
+    pid=None
     if len(pixivids) > 0:
 
         for pid in pixivids:
             try:
-                response = pixivapi.illust_detail(pid)
+                response=pixivapi.illust_detail(pid)
             except:
                 update.message.reply_text("Network error, please retry")
             if response.illust is not None:
@@ -168,11 +170,11 @@ def photohandler(update: Update, context: CallbackContext) -> None:
 
 def main():
     if USE_PROXY:
-        updater = Updater(token=TOKEN,
+        updater=Updater(token=TOKEN,
                           request_kwargs={'proxy_url': PROXY_URL},
                           use_context=True)
     else:
-        updater = Updater(token=TOKEN, use_context=True)
+        updater=Updater(token=TOKEN, use_context=True)
 
     updater.dispatcher.add_handler(CommandHandler("start", start))
     updater.dispatcher.add_handler(CommandHandler("help", start))
