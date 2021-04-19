@@ -1,19 +1,18 @@
 # -*- coding: utf-8 -*-
-# pylint: disable=W0613, C0116
-# type: ignore[union-attr]
 # This program is dedicated to the public domain under the CC0 license.
 
 
 import logging
 import os
 from configparser import ConfigParser
-from typing import List
+from typing import List, Tuple
 
 from pixivpy3 import *
 from saucenao_api import SauceNao
-from saucenao_api.containers import SauceResponse
-from telegram import Message, PhotoSize, Update, chat
-from telegram.ext import CallbackContext, Filters, MessageHandler, Updater, CommandHandler
+from saucenao_api.containers import BasicSauce, SauceResponse
+from telegram import Message, PhotoSize, Update
+from telegram.ext import (CallbackContext, CommandHandler, Filters,
+                          MessageHandler, Updater)
 
 cfgparser = ConfigParser()
 cfgparser.read("config.ini")
@@ -38,15 +37,15 @@ logger = logging.getLogger(__name__)
 
 def start(update: Update, context: CallbackContext) -> None:
     update.message.reply_text(
-        "GitHub repo:\nhttps://github.com/Antares0982/pixiv-search-download-telegram-bot\nTry to send an illustration to me!")
+        "GitHub repo:\nhttps://github.com/Antares0982/pixiv-search-download-telegram-bot\nTry to send an illustration to me!\nWill not receive any group/channel message.")
 
 
-def tgphoto(update: Update):
+def tgphoto(update: Update) -> str:
+    """return filepath"""
     ph = update.message.photo[-1]
     photo = ph.get_file()
     extname = photo.file_path[photo.file_path.rfind('.'):]
 
-    print(photo.file_unique_id)
     tpfilepath = os.path.join(path_store, photo.file_unique_id+extname)
     if not os.path.exists(photo.file_unique_id+extname):
         photo.download(tpfilepath)
@@ -54,7 +53,7 @@ def tgphoto(update: Update):
     return tpfilepath
 
 
-def dataprocess(response: SauceResponse) -> List[str]:
+def dataprocess(response: SauceResponse) -> Tuple[List[str], List[BasicSauce]]:
     results = [x for x in response.results if x.similarity > 70]
 
     pixivids: List[str] = []
@@ -68,10 +67,10 @@ def dataprocess(response: SauceResponse) -> List[str]:
             newpid = scurl[scurl.rfind('/')+1:]
             pixivids.append(newpid) if newpid not in pixivids else ...
 
-    return pixivids
+    return pixivids, results
 
 
-def sendresult(update: Update, pixivapi: AppPixivAPI, response, pid: str):
+def sendResult(update: Update, pixivapi: AppPixivAPI, response, pid: str, results: List[BasicSauce]) -> None:
     if response is not None and response.illust is not None:
         update.message.reply_text(
             "Found from pixiv, sending original illust...")
@@ -87,8 +86,11 @@ def sendresult(update: Update, pixivapi: AppPixivAPI, response, pid: str):
                     update.message.reply_photo(
                         f, caption=f"source: https://www.pixiv.net/artworks/{pid}")
                 except:
-                    update.message.reply_text(
-                        "Network error, cannot send this illust")
+                    try:
+                        update.message.reply_text(
+                            "Network error, cannot send this illust")
+                    except:
+                        ...
         else:
             for page in response.illust.meta_pages:
                 url = page.image_urls.original
@@ -100,8 +102,11 @@ def sendresult(update: Update, pixivapi: AppPixivAPI, response, pid: str):
                         update.message.reply_photo(
                             f, caption=f"source: https://www.pixiv.net/artworks/{pid}")
                     except:
-                        update.message.reply_text(
-                            "Network error, cannot send this illust")
+                        try:
+                            update.message.reply_text(
+                                "Network error, cannot send one illust")
+                        except:
+                            ...
     else:
         rttext = "Can't find from pixiv. Other sources:\n"+"\n".join(
             [result.urls[0]+f" similarity:{result.similarity}" for result in results if len(result.urls) > 0])
@@ -109,6 +114,8 @@ def sendresult(update: Update, pixivapi: AppPixivAPI, response, pid: str):
 
 
 def photohandler(update: Update, context: CallbackContext) -> None:
+    if update.effective_chat.type != "private":
+        return
     update.message.reply_text("Searching...")
 
     sauce = SauceNao(api_key=sauceapikey)
@@ -131,11 +138,12 @@ def photohandler(update: Update, context: CallbackContext) -> None:
         update.message.reply_text("No results")
         return
 
-    pixivids = dataprocess(response)
+    pixivids, results = dataprocess(response)
 
     response = None
 
     # Getting result from pixiv
+    pid = None
     if len(pixivids) > 0:
         for pid in pixivids:
             try:
@@ -147,9 +155,9 @@ def photohandler(update: Update, context: CallbackContext) -> None:
 
     if len(pixivids) > 0 and response.illust is None:
         update.message.reply_text(
-            "The illustration may be deleted or removed from pixiv")
+            "The illustration may be removed from pixiv")
 
-    sendresult(update, pixivapi, response, pid)
+    sendResult(update, pixivapi, response, pid, results)
 
 
 def main():
@@ -161,13 +169,12 @@ def main():
         updater = Updater(token=TOKEN, use_context=True)
 
     updater.dispatcher.add_handler(CommandHandler("start", start))
+    updater.dispatcher.add_handler(CommandHandler("help", start))
     updater.dispatcher.add_handler(MessageHandler(
         Filters.photo, photohandler))
 
-    updater.start_polling()
+    updater.start_polling(drop_pending_updates=True)
 
-    # Run the bot until the user presses Ctrl-C or the process receives SIGINT,
-    # SIGTERM or SIGABRT
     updater.idle()
 
 
