@@ -107,10 +107,12 @@ def sendResult(update: Update, pixivapi: AppPixivAPI, response, pid: str, result
                                 "Network error, cannot send one illust")
                         except:
                             ...
-    else:
+    elif len(results) > 0:
         rttext = "Can't find from pixiv. Other sources:\n"+"\n".join(
             [result.urls[0]+f" similarity:{result.similarity}" for result in results if len(result.urls) > 0])
         update.message.reply_text(rttext)
+    else:
+        update.message.reply_text("no reslts")
 
 
 def photohandler(update: Update, context: CallbackContext) -> None:
