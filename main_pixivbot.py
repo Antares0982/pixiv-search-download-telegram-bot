@@ -34,6 +34,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+try:
+    pixivapi = AppPixivAPI()
+    pixivapi.set_accept_language('en-us')
+    pixivapi.auth(refresh_token=_REFRESH_TOKEN)
+except PixivError:
+    exit(1)
+
 
 def start(update: Update, context: CallbackContext) -> None:
     update.message.reply_text(
@@ -70,7 +77,7 @@ def dataprocess(response: SauceResponse) -> Tuple[List[str], List[BasicSauce]]:
     return pixivids, results
 
 
-def sendResult(update: Update, pixivapi: AppPixivAPI, response, pid: str, results: List[BasicSauce]) -> None:
+def sendResult(update: Update, response, pid: str, results: List[BasicSauce]) -> None:
     if response is not None and response.illust is not None:
         update.message.reply_text(
             "Found from pixiv, sending original illust...")
@@ -122,10 +129,6 @@ def photohandler(update: Update, context: CallbackContext) -> None:
 
     sauce = SauceNao(api_key=sauceapikey)
 
-    pixivapi = AppPixivAPI()
-    pixivapi.set_accept_language('en-us')
-    pixivapi.auth(refresh_token=_REFRESH_TOKEN)
-
     tpfilepath = tgphoto(update)
 
     # Getting result from SauceNAO
@@ -147,6 +150,7 @@ def photohandler(update: Update, context: CallbackContext) -> None:
     # Getting result from pixiv
     pid = None
     if len(pixivids) > 0:
+
         for pid in pixivids:
             try:
                 response = pixivapi.illust_detail(pid)
@@ -159,7 +163,7 @@ def photohandler(update: Update, context: CallbackContext) -> None:
         update.message.reply_text(
             "The illustration may be removed from pixiv")
 
-    sendResult(update, pixivapi, response, pid, results)
+    sendResult(update, response, pid, results)
 
 
 def main():
