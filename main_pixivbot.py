@@ -61,7 +61,6 @@ def testphotohandler(update: Update, context: CallbackContext) -> None:
 
     pixivid: str = ""
     for result in results:
-        print(result.raw)
 
         if pixivid != "":
             continue
@@ -75,11 +74,9 @@ def testphotohandler(update: Update, context: CallbackContext) -> None:
     if pixivid != "":
         update.message.reply_text("Found from pixiv, sending original illust")
         response = pixivapi.illust_detail(pixivid)
-        print(response)
 
         if response.illust.meta_single_page:
             url: str = response.illust.meta_single_page.original_image_url
-            print(url)
             pixivapi.download(url, path=path_store)
 
             fname = os.path.join(path_store, url[url.rfind('/')+1:])
