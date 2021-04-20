@@ -197,7 +197,7 @@ def photohandler(update: Update, context: CallbackContext) -> None:
 
     tpfilepath = tgphoto(update)
     if tpfilepath in searchHistoryMap:
-        sendbyhistory(tpfilepath)
+        sendbyhistory(update, tpfilepath)
         return
 
     # Getting result from SauceNAO
