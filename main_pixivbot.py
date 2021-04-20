@@ -131,7 +131,8 @@ def sendResult(update: Update, response, pid: str, results: List[BasicSauce]) ->
                 try:
                     update.message.reply_document(
                         f, caption=f"source: https://www.pixiv.net/artworks/{pid}")
-                except:
+                except Exception as e:
+                    print(type(e), e)
                     try:
                         update.message.reply_text(
                             "Network error, cannot send this illust. Please retry")
@@ -149,7 +150,8 @@ def sendResult(update: Update, response, pid: str, results: List[BasicSauce]) ->
                     try:
                         update.message.reply_document(
                             f, caption=f"source: https://www.pixiv.net/artworks/{pid}")
-                    except:
+                    except Exception as e:
+                        print(type(e), e)
                         try:
                             update.message.reply_text(
                                 "Network error, cannot send one illust. Please retry")
@@ -258,7 +260,7 @@ def main():
     #     renewPixivapi()
     # except PixivError:
     #     exit(1)
-    
+
     if USE_PROXY:
         updater = Updater(token=TOKEN,
                           request_kwargs={'proxy_url': PROXY_URL},
