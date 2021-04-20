@@ -4,6 +4,8 @@
 import json
 import logging
 import os
+import time
+
 from configparser import ConfigParser
 from typing import Dict, List, Tuple
 
@@ -55,15 +57,26 @@ searchHistoryMap: Dict[str, List[str]]
 
 
 def checkPixivapi() -> bool:
-    response = pixivapi.illust_detail('85281729')
+    try:
+        response = pixivapi.illust_detail('85281729')
+    except:
+        return False
     return False if response.illust is None else True
 
 
 def renewPixivapi() -> None:
     global pixivapi
-    pixivapi = AppPixivAPI()
-    pixivapi.set_accept_language('en-us')
-    pixivapi.auth(refresh_token=_REFRESH_TOKEN)
+    i = 0
+    while i < 5:
+        try:
+            pixivapi = AppPixivAPI()
+            pixivapi.set_accept_language('en-us')
+            pixivapi.auth(refresh_token=_REFRESH_TOKEN)
+        except:
+            i += 1
+            time.sleep(10)
+        else:
+            return
 
 
 def start(update: Update, context: CallbackContext) -> None:
@@ -188,9 +201,6 @@ def photohandler(update: Update, context: CallbackContext) -> None:
     if update.effective_chat.type != "private":
         return
 
-    if not checkPixivapi():
-        renewPixivapi()
-
     update.message.reply_text("Searching...")
 
     sauce = SauceNao(api_key=sauceapikey)
@@ -220,6 +230,9 @@ def photohandler(update: Update, context: CallbackContext) -> None:
     # Getting result from pixiv
     pid = None
     if len(pixivids) > 0:
+        if not checkPixivapi():
+            update.message.reply_text("Starting pixiv authentication...")
+            renewPixivapi()
 
         for pid in pixivids:
             try:
@@ -241,10 +254,11 @@ def photohandler(update: Update, context: CallbackContext) -> None:
 
 
 def main():
-    try:
-        renewPixivapi()
-    except PixivError:
-        exit(1)
+    # try:
+    #     renewPixivapi()
+    # except PixivError:
+    #     exit(1)
+    
     if USE_PROXY:
         updater = Updater(token=TOKEN,
                           request_kwargs={'proxy_url': PROXY_URL},
