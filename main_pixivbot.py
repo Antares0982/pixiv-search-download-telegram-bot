@@ -37,7 +37,7 @@ try:
         searchHistoryMap = json.load(f)
 except FileNotFoundError:
     with open(path_history, 'w', encoding='utf-8') as f:
-        json.dump({}, f)
+        json.dump({}, f, indent=4, ensure_ascii=False)
     searchHistoryMap = {}
 
 USE_PROXY = cfgparser.getboolean("proxy", "use")
@@ -237,7 +237,7 @@ def photohandler(update: Update, context: CallbackContext) -> None:
     mapvalue = sendResult(update, response, pid, results)
     searchHistoryMap[tpfilepath] = mapvalue
     with open(path_history, 'w', encoding='utf-8') as f:
-        json.dump(searchHistoryMap, f)
+        json.dump(searchHistoryMap, f, indent=4, ensure_ascii=False)
 
 
 def main():
