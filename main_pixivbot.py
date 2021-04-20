@@ -34,12 +34,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-try:
+pixivapi: AppPixivAPI = None
+
+
+def checkPixivapi() -> bool:
+    response = pixivapi.illust_detail('85281729')
+    return False if response.illust is None else True
+
+
+def renewPixivapi() -> None:
+    global pixivapi
     pixivapi = AppPixivAPI()
     pixivapi.set_accept_language('en-us')
     pixivapi.auth(refresh_token=_REFRESH_TOKEN)
-except PixivError:
-    exit(1)
 
 
 def start(update: Update, context: CallbackContext) -> None:
@@ -90,7 +97,7 @@ def sendResult(update: Update, response, pid: str, results: List[BasicSauce]) ->
             fname = os.path.join(path_store, url[url.rfind('/')+1:])
             with open(fname, 'rb') as f:
                 try:
-                    update.message.reply_photo(
+                    update.message.reply_document(
                         f, caption=f"source: https://www.pixiv.net/artworks/{pid}")
                 except:
                     try:
@@ -127,8 +134,13 @@ def sendResult(update: Update, response, pid: str, results: List[BasicSauce]) ->
 
 
 def photohandler(update: Update, context: CallbackContext) -> None:
+
     if update.effective_chat.type != "private":
         return
+
+    if not checkPixivapi():
+        renewPixivapi()
+
     update.message.reply_text("Searching...")
 
     sauce = SauceNao(api_key=sauceapikey)
@@ -171,6 +183,10 @@ def photohandler(update: Update, context: CallbackContext) -> None:
 
 
 def main():
+    try:
+        renewPixivapi()
+    except PixivError:
+        exit(1)
     if USE_PROXY:
         updater = Updater(token=TOKEN,
                           request_kwargs={'proxy_url': PROXY_URL},
