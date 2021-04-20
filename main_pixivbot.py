@@ -77,7 +77,7 @@ def tgphoto(update: Update) -> str:
     photo = ph.get_file()
     extname = photo.file_path[photo.file_path.rfind('.'):]
 
-    tpfilepath = os.path.join(path_store, photo.file_unique_id+extname)
+    tpfilepath = os.path.join(path_temp, photo.file_unique_id+extname)
     if not os.path.exists(photo.file_unique_id+extname):
         photo.download(tpfilepath)
 
