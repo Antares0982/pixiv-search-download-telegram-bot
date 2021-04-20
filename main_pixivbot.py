@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import time
+import sys
 
 from configparser import ConfigParser
 from typing import Dict, List, Tuple
@@ -97,6 +98,10 @@ def tgphoto(update: Update) -> str:
     return tpfilepath
 
 
+def getpidFromPath(path: str) -> str:
+    return path[path.rfind("\\")+1:path.rfind("_")] if sys.platform == "win32" else path[path.rfind('/')+1:path.rfind("_")]
+
+
 def dataprocess(response: SauceResponse) -> Tuple[List[str], List[BasicSauce]]:
     results = [x for x in response.results if x.similarity > 70]
 
@@ -180,7 +185,7 @@ def sendbyhistory(update: Update, key: str) -> None:
         update.message.reply_text(ans[0])
         return
 
-    pid = ans[0][ans[0].rfind('/')+1:ans[0].rfind('_')]
+    pid = getpidFromPath(ans[0])
     for fname in ans:
         with open(fname, 'rb') as f:
             try:
