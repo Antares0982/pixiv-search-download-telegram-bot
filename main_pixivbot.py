@@ -8,7 +8,7 @@ import time
 import sys
 
 from configparser import ConfigParser
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from pixivpy3 import *
 from saucenao_api import SauceNao
@@ -16,7 +16,7 @@ from saucenao_api.containers import BasicSauce, SauceResponse
 from telegram import Update
 from telegram.ext import (CallbackContext, CommandHandler, Filters,
                           MessageHandler, Updater)
-
+from telegram.error import TimedOut
 cfgparser = ConfigParser()
 cfgparser.read("config.ini")
 
@@ -80,11 +80,6 @@ def renewPixivapi() -> None:
             return
 
 
-def start(update: Update, context: CallbackContext) -> None:
-    update.message.reply_text(
-        "GitHub repo:\nhttps://github.com/Antares0982/pixiv-search-download-telegram-bot\nTry to send an illustration to me!\nWill not receive any group/channel message.")
-
-
 def tgphoto(update: Update) -> str:
     """return filepath"""
     ph = update.message.photo[-1]
@@ -120,6 +115,7 @@ def dataprocess(response: SauceResponse) -> Tuple[List[str], List[BasicSauce]]:
 
 
 def sendResult(update: Update, response, pid: str, results: List[BasicSauce]) -> List[str]:
+    """returns the filepaths list or message to store"""
     ans: List[str]
     if response is not None and response.illust is not None:
         update.message.reply_text(
@@ -135,12 +131,15 @@ def sendResult(update: Update, response, pid: str, results: List[BasicSauce]) ->
             with open(fname, 'rb') as f:
                 try:
                     update.message.reply_document(
-                        f, caption=f"source: https://www.pixiv.net/artworks/{pid}")
+                        f, caption=f"source: https://www.pixiv.net/artworks/{pid}", timeout=120)
+                except TimedOut:
+                    update.message.reply_text(
+                        "Sending illustration timed out. Maybe file is too large")
                 except Exception as e:
                     print(type(e), e)
                     try:
                         update.message.reply_text(
-                            "Network error, cannot send this illust. Please retry")
+                            "Unknown network error, cannot send this illust. Please retry")
                     except:
                         ...
         else:
@@ -154,7 +153,10 @@ def sendResult(update: Update, response, pid: str, results: List[BasicSauce]) ->
                 with open(fname, 'rb') as f:
                     try:
                         update.message.reply_document(
-                            f, caption=f"source: https://www.pixiv.net/artworks/{pid}")
+                            f, caption=f"source: https://www.pixiv.net/artworks/{pid}", timeout=120)
+                    except TimedOut:
+                        update.message.reply_text(
+                            "Sending illustration timed out. Maybe file is too large")
                     except Exception as e:
                         print(type(e), e)
                         try:
@@ -175,6 +177,30 @@ def sendResult(update: Update, response, pid: str, results: List[BasicSauce]) ->
     return []
 
 
+def downloadFromPid(pid: str, index: Optional[int] = None) -> None:
+    if not checkPixivapi():
+        renewPixivapi()
+
+    try:
+        response = pixivapi.illust_detail(pid)
+    except:
+        ...
+
+    if response.illust.meta_single_page:
+        url: str = response.illust.meta_single_page.original_image_url
+        pixivapi.download(url, path=path_store)
+    else:
+        for page in response.illust.meta_pages:
+
+            url = page.image_urls.original
+            if index is not None:
+                pagenum = int(url[url.rfind("_")+2:url.rfind(".")])
+                if pagenum != index:
+                    continue
+
+            pixivapi.download(url, path=path_store)
+
+
 def sendbyhistory(update: Update, key: str) -> None:
     ans = searchHistoryMap[key]
     if len(ans) == 0:
@@ -187,10 +213,16 @@ def sendbyhistory(update: Update, key: str) -> None:
 
     pid = getpidFromPath(ans[0])
     for fname in ans:
+        while not os.path.exists(fname):
+            pagenum = int(fname[fname.rfind("_")+2:fname.rfind(".")])
+            downloadFromPid(pid, pagenum)
         with open(fname, 'rb') as f:
             try:
                 update.message.reply_document(
-                    f, caption=f"source: https://www.pixiv.net/artworks/{pid}")
+                    f, caption=f"source: https://www.pixiv.net/artworks/{pid}", timeout=120)
+            except TimedOut:
+                update.message.reply_text(
+                    "Sending illustration timed out. Maybe file is too large")
             except Exception as e:
                 print(type(e), e)
                 try:
@@ -202,6 +234,11 @@ def sendbyhistory(update: Update, key: str) -> None:
                             "Network error, cannot send one illust. Please retry")
                 except:
                     ...
+
+
+def start(update: Update, context: CallbackContext) -> None:
+    update.message.reply_text(
+        "GitHub repo:\nhttps://github.com/Antares0982/pixiv-search-download-telegram-bot\nTry to send an illustration to me!\nWill not receive any group/channel message.")
 
 
 def photohandler(update: Update, context: CallbackContext) -> None:
