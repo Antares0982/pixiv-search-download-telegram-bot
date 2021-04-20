@@ -15,7 +15,7 @@ pip3 install -r requirements.txt
   * SauceNAO: get your api-key [here](https://saucenao.com/), click "account" to sign in/up.
   * Telegram: get your own bot [here](https://t.me/botfather).
 
-  * Set up your proxy if you need, and choose a path to store illusts.
+  * Set up your proxy if you need, and choose the paths to store illustrations and temp file from telegram. Also a json file to store search history.
 
 * ```
   python3 main_pixivbot.py

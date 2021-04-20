@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
 # This program is dedicated to the public domain under the CC0 license.
 
-
+import json
 import logging
 import os
 from configparser import ConfigParser
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 from pixivpy3 import *
 from saucenao_api import SauceNao
 from saucenao_api.containers import BasicSauce, SauceResponse
-from telegram import Message, PhotoSize, Update
+from telegram import Update
 from telegram.ext import (CallbackContext, CommandHandler, Filters,
                           MessageHandler, Updater)
 
@@ -24,6 +24,21 @@ _REFRESH_TOKEN = cfgparser["pixiv"]["REFRESH_TOKEN"]
 sauceapikey = cfgparser["SauceNAO"]["api_key"]
 
 path_store = cfgparser["path"]["store"]
+if not os.path.exists(path_store):
+    os.makedirs(path_store)
+
+path_temp = cfgparser["path"]["tempillust"]
+if not os.path.exists(path_temp):
+    os.makedirs(path_temp)
+
+path_history = cfgparser["path"]["history_json"]
+try:
+    with open(path_history, 'r', encoding='utf-8') as f:
+        searchHistoryMap = json.load(f)
+except FileNotFoundError:
+    with open(path_history, 'w', encoding='utf-8') as f:
+        json.dump({}, f)
+    searchHistoryMap = {}
 
 USE_PROXY = cfgparser.getboolean("proxy", "use")
 
@@ -35,6 +50,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 pixivapi: AppPixivAPI = None
+
+searchHistoryMap: Dict[str, List[str]]
 
 
 def checkPixivapi() -> bool:
@@ -84,7 +101,8 @@ def dataprocess(response: SauceResponse) -> Tuple[List[str], List[BasicSauce]]:
     return pixivids, results
 
 
-def sendResult(update: Update, response, pid: str, results: List[BasicSauce]) -> None:
+def sendResult(update: Update, response, pid: str, results: List[BasicSauce]) -> List[str]:
+    ans: List[str]
     if response is not None and response.illust is not None:
         update.message.reply_text(
             "Found from pixiv, sending original illust...")
@@ -95,6 +113,7 @@ def sendResult(update: Update, response, pid: str, results: List[BasicSauce]) ->
             pixivapi.download(url, path=path_store)
 
             fname = os.path.join(path_store, url[url.rfind('/')+1:])
+            ans = [fname]
             with open(fname, 'rb') as f:
                 try:
                     update.message.reply_document(
@@ -102,35 +121,66 @@ def sendResult(update: Update, response, pid: str, results: List[BasicSauce]) ->
                 except:
                     try:
                         update.message.reply_text(
-                            "Network error, cannot send this illust")
+                            "Network error, cannot send this illust. Please retry")
                     except:
                         ...
         else:
+            ans = []
             for page in response.illust.meta_pages:
                 url = page.image_urls.original
                 pixivapi.download(url, path=path_store)
 
                 fname = os.path.join(path_store, url[url.rfind('/')+1:])
+                ans.append(fname)
                 with open(fname, 'rb') as f:
                     try:
-                        update.message.reply_photo(
+                        update.message.reply_document(
                             f, caption=f"source: https://www.pixiv.net/artworks/{pid}")
                     except:
                         try:
                             update.message.reply_text(
-                                "Network error, cannot send one illust")
+                                "Network error, cannot send one illust. Please retry")
                         except:
                             ...
-        return
+        return ans
     if len(results) > 0:
         rturls = "\n".join(
             [result.urls[0]+f" similarity:{result.similarity}" for result in results if len(result.urls) > 0])
         if rturls != "":
             update.message.reply_text(
                 "Can't find from pixiv. Other sources:\n"+rturls)
-            return
+            return ["Can't find from pixiv. Other sources:\n"+rturls]
 
-    update.message.reply_text("no reslts")
+    update.message.reply_text("no results")
+    return []
+
+
+def sendbyhistory(update: Update, key: str) -> None:
+    ans = searchHistoryMap[key]
+    if len(ans) == 0:
+        update.message.reply_text("no results")
+        return
+
+    if len(ans) == 1 and ans[0].find("Can't find from pixiv.") == 0:
+        update.message.reply_text(ans[0])
+        return
+
+    pid = ans[0][ans[0].rfind('/')+1:ans[0].rfind('_')]
+    for fname in ans:
+        with open(fname, 'rb') as f:
+            try:
+                update.message.reply_document(
+                    f, caption=f"source: https://www.pixiv.net/artworks/{pid}")
+            except:
+                try:
+                    if len(ans) == 1:
+                        update.message.reply_text(
+                            "Network error, cannot send this illust. Please retry")
+                    else:
+                        update.message.reply_text(
+                            "Network error, cannot send one illust. Please retry")
+                except:
+                    ...
 
 
 def photohandler(update: Update, context: CallbackContext) -> None:
@@ -146,13 +196,17 @@ def photohandler(update: Update, context: CallbackContext) -> None:
     sauce = SauceNao(api_key=sauceapikey)
 
     tpfilepath = tgphoto(update)
+    if tpfilepath in searchHistoryMap:
+        sendbyhistory(tpfilepath)
+        return
 
     # Getting result from SauceNAO
     with open(tpfilepath, 'rb') as f:
         try:
             response = sauce.from_file(f)
         except:
-            update.message.reply_text("Network error, please retry")
+            update.message.reply_text(
+                "Network error when connecting to SauceNAO, please retry. If this happens frequently, maybe the daily search limit exceeded.")
             return
 
     if not(len(response.results) > 0 and response.results[0].similarity > 70):
@@ -171,7 +225,8 @@ def photohandler(update: Update, context: CallbackContext) -> None:
             try:
                 response = pixivapi.illust_detail(pid)
             except:
-                update.message.reply_text("Network error, please retry")
+                update.message.reply_text(
+                    "Network error when connecting to Pixiv, please retry")
             if response.illust is not None:
                 break
 
@@ -179,7 +234,10 @@ def photohandler(update: Update, context: CallbackContext) -> None:
         update.message.reply_text(
             "The illustration may be removed from pixiv")
 
-    sendResult(update, response, pid, results)
+    mapvalue = sendResult(update, response, pid, results)
+    searchHistoryMap[tpfilepath] = mapvalue
+    with open(path_history, 'w', encoding='utf-8') as f:
+        json.dump(searchHistoryMap, f)
 
 
 def main():
