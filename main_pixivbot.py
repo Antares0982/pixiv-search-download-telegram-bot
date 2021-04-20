@@ -191,7 +191,8 @@ def sendbyhistory(update: Update, key: str) -> None:
             try:
                 update.message.reply_document(
                     f, caption=f"source: https://www.pixiv.net/artworks/{pid}")
-            except:
+            except Exception as e:
+                print(type(e), e)
                 try:
                     if len(ans) == 1:
                         update.message.reply_text(
