@@ -18,6 +18,7 @@ from telegram import Update
 from telegram.ext import (CallbackContext, CommandHandler, Filters,
                           MessageHandler, Updater)
 from telegram.error import TimedOut
+
 cfgparser = ConfigParser()
 cfgparser.read("config.ini")
 
@@ -315,18 +316,21 @@ def texthandler(update: Update, context: CallbackContext) -> None:
     if update.message is None or not update.message.text:
         return
 
+    if update.message.text == "stop":
+        return stop(update, context)
+
     try:
         pidint = int(update.message.text)
     except:
         return
 
-    if not checkPixivapi():
-        update.message.reply_text("Starting pixiv authentication...")
-        renewPixivapi()
-
     pid = update.message.text
     if pid in searchHistoryMap:
         return sendbyhistory(update, pid)
+
+    if not checkPixivapi():
+        update.message.reply_text("Starting pixiv authentication...")
+        renewPixivapi()
 
     try:
         response = pixivapi.illust_detail(pid)
@@ -341,6 +345,9 @@ def texthandler(update: Update, context: CallbackContext) -> None:
         return
 
     update.message.reply_text("Getting illust...")
+    if update.effective_chat.id == addbkmarkID:
+        pixivapi.illust_bookmark_add(pid)
+
     if response.illust.meta_single_page:
         url: str = response.illust.meta_single_page.original_image_url
 
