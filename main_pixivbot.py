@@ -102,7 +102,7 @@ def getpidFromPath(path: str) -> str:
 
 
 def dataprocess(response: SauceResponse) -> Tuple[List[str], List[BasicSauce]]:
-    results = [x for x in response.results if x.similarity > 70]
+    results = [x for x in response.results if x.similarity > 40]
 
     pixivids: List[str] = []
     for result in results:
@@ -271,7 +271,7 @@ def photohandler(update: Update, context: CallbackContext) -> None:
                 "Network error when connecting to SauceNAO, please retry. If this happens frequently, maybe the daily search limit exceeded.")
             return
 
-    if not(len(response.results) > 0 and response.results[0].similarity > 70):
+    if not(len(response.results) > 0 and response.results[0].similarity > 40):
         update.message.reply_text("No results")
         return
 
