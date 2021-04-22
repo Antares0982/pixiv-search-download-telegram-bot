@@ -6,6 +6,7 @@ import logging
 import os
 import time
 import sys
+import signal
 
 from configparser import ConfigParser
 from typing import Dict, List, Optional, Tuple
@@ -21,6 +22,8 @@ cfgparser = ConfigParser()
 cfgparser.read("config.ini")
 
 TOKEN = cfgparser["tgbot"]["TOKEN"]
+OWNERID = cfgparser.getint("tgbot", "OWNERID")
+addbkmarkID = cfgparser.getint("tgbot", "ADDBOOKMARKID")
 
 _REFRESH_TOKEN = cfgparser["pixiv"]["REFRESH_TOKEN"]
 
@@ -121,6 +124,9 @@ def sendResult(update: Update, response, pid: str, results: List[BasicSauce]) ->
         update.message.reply_text(
             "Found from pixiv, sending original illust...")
 
+        if update.effective_chat.id == addbkmarkID:
+            pixivapi.illust_bookmark_add(pid)
+
         if response.illust.meta_single_page:
             url: str = response.illust.meta_single_page.original_image_url
 
@@ -184,7 +190,7 @@ def downloadFromPid(pid: str, index: Optional[int] = None) -> None:
     try:
         response = pixivapi.illust_detail(pid)
     except:
-        ...
+        return
 
     if response.illust.meta_single_page:
         url: str = response.illust.meta_single_page.original_image_url
@@ -293,17 +299,83 @@ def photohandler(update: Update, context: CallbackContext) -> None:
             "The illustration may be removed from pixiv")
 
     mapvalue = sendResult(update, response, pid, results)
+
     searchHistoryMap[tpfilepath] = mapvalue
+    if pid is not None:
+        searchHistoryMap[pid] = mapvalue
+
     with open(path_history, 'w', encoding='utf-8') as f:
         json.dump(searchHistoryMap, f, indent=4, ensure_ascii=False)
 
 
-def main():
-    # try:
-    #     renewPixivapi()
-    # except PixivError:
-    #     exit(1)
+def texthandler(update: Update, context: CallbackContext) -> None:
+    if update.effective_chat.type != "private":
+        return
 
+    if update.message is None or not update.message.text:
+        return
+
+    try:
+        pidint = int(update.message.text)
+    except:
+        return
+
+    if not checkPixivapi():
+        update.message.reply_text("Starting pixiv authentication...")
+        renewPixivapi()
+
+    pid = update.message.text
+    if pid in searchHistoryMap:
+        return sendbyhistory(update, pid)
+
+    try:
+        response = pixivapi.illust_detail(pid)
+    except:
+        update.message.reply_text(
+            "Network error when connecting to Pixiv, please retry")
+        return
+
+    if response.illust is None:
+        update.message.reply_text(
+            "Invalid pid")
+        return
+
+    update.message.reply_text("Getting illust...")
+    if response.illust.meta_single_page:
+        url: str = response.illust.meta_single_page.original_image_url
+
+        fname = os.path.join(path_store, url[url.rfind('/')+1:])
+        while not os.path.exists(fname):
+            pixivapi.download(url, path=path_store)
+
+        with open(fname, 'rb') as f:
+            update.message.reply_document(
+                f, caption=f"source: https://www.pixiv.net/artworks/{pid}", timeout=120)
+        return
+
+    for page in response.illust.meta_pages:
+
+        url: str = page.image_urls.original
+
+        fname = url[url.rfind('/')+1:]
+        while not os.path.exists(fname):
+            pixivapi.download(url, path=path_store)
+
+        with open(fname, 'rb') as f:
+            update.message.reply_document(
+                f, caption=f"source: https://www.pixiv.net/artworks/{pid}", timeout=120)
+
+
+def stop(update: Update, context: CallbackContext) -> None:
+    if update.effective_chat.id != OWNERID:
+        return
+
+    pid = os.getpid()
+    update.message.reply_text("Stopping...")
+    os.kill(pid, signal.SIGINT)
+
+
+def main():
     if USE_PROXY:
         updater = Updater(token=TOKEN,
                           request_kwargs={'proxy_url': PROXY_URL},
@@ -313,8 +385,15 @@ def main():
 
     updater.dispatcher.add_handler(CommandHandler("start", start))
     updater.dispatcher.add_handler(CommandHandler("help", start))
+    updater.dispatcher.add_handler(CommandHandler("stop", stop))
+
     updater.dispatcher.add_handler(MessageHandler(
-        Filters.photo, photohandler))
+        Filters.photo, photohandler
+    ))
+    updater.dispatcher.add_handler(MessageHandler(
+        Filters.text & (~Filters.command) & (~Filters.video) & (
+            ~Filters.photo) & (~Filters.video) & (~Filters.sticker), texthandler
+    ))
 
     updater.start_polling(drop_pending_updates=True)
 
