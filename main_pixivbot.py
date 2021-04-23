@@ -367,7 +367,7 @@ def texthandler(update: Update, context: CallbackContext) -> None:
 
         url: str = page.image_urls.original
 
-        fname = url[url.rfind('/')+1:]
+        fname = os.path.join(path_store, url[url.rfind('/')+1:])
         
         i = 0
         while not os.path.exists(fname) and i < 5:
