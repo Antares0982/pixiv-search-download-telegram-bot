@@ -352,8 +352,11 @@ def texthandler(update: Update, context: CallbackContext) -> None:
         url: str = response.illust.meta_single_page.original_image_url
 
         fname = os.path.join(path_store, url[url.rfind('/')+1:])
-        while not os.path.exists(fname):
+
+        i = 0
+        while not os.path.exists(fname) and i < 5:
             pixivapi.download(url, path=path_store)
+            i += 1
 
         with open(fname, 'rb') as f:
             update.message.reply_document(
@@ -365,8 +368,11 @@ def texthandler(update: Update, context: CallbackContext) -> None:
         url: str = page.image_urls.original
 
         fname = url[url.rfind('/')+1:]
-        while not os.path.exists(fname):
+        
+        i = 0
+        while not os.path.exists(fname) and i < 5:
             pixivapi.download(url, path=path_store)
+            i += 1
 
         with open(fname, 'rb') as f:
             update.message.reply_document(
