@@ -245,7 +245,7 @@ def sendbyhistory(update: Update, key: str) -> None:
 
 def start(update: Update, context: CallbackContext) -> None:
     update.message.reply_text(
-        "GitHub repo:\nhttps://github.com/Antares0982/pixiv-search-download-telegram-bot\nTry to send an illustration to me!\nWill not receive any group/channel message.")
+        "GitHub repo:\nhttps://github.com/Antares0982/pixiv-search-download-telegram-bot\nTry to send an illustration or a pixiv id to me!\nWill not receive any group/channel message.")
 
 
 def photohandler(update: Update, context: CallbackContext) -> None:
