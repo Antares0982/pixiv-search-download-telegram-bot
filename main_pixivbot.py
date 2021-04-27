@@ -330,6 +330,7 @@ def photohandler(update: Update, context: CallbackContext) -> None:
                 if i < 4:
                     update.message.reply_text(
                         "Network error when connecting to SauceNAO, retrying...")
+                    time.sleep(10)
                 else:
                     if alternum > 1 and use_http_proxy:
                         for i in range(alternum-1):
