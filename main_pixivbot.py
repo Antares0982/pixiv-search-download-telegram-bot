@@ -486,7 +486,7 @@ def switch(update: Update, context: CallbackContext) -> None:
         return
 
     changeSauce()
-
+    update.message.reply_text("Done")
 
 def main():
     if USE_PROXY:
