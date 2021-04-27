@@ -25,6 +25,8 @@ cfgparser.read("config.ini")
 TOKEN = cfgparser["tgbot"]["TOKEN"]
 OWNERID = cfgparser.getint("tgbot", "OWNERID")
 addbkmarkID = cfgparser.getint("tgbot", "ADDBOOKMARKID")
+USE_PROXY = cfgparser.getboolean("tgbot", "use_proxy")
+PROXY_URL = cfgparser["tgbot"]["url"]
 
 _REFRESH_TOKEN = cfgparser["pixiv"]["REFRESH_TOKEN"]
 
@@ -47,9 +49,7 @@ except FileNotFoundError:
         json.dump({}, f, indent=4, ensure_ascii=False)
     searchHistoryMap = {}
 
-USE_PROXY = cfgparser.getboolean("proxy", "use")
 
-PROXY_URL = cfgparser["proxy"]["url"]
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
