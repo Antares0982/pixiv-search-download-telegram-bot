@@ -4,20 +4,23 @@
 import json
 import logging
 import os
-import time
-import sys
 import signal
-
+import sys
+import time
 from configparser import ConfigParser
+from io import BufferedReader
 from typing import Dict, List, Optional, Tuple
 
+import requests
 from pixivpy3 import *
 from saucenao_api import SauceNao
 from saucenao_api.containers import BasicSauce, SauceResponse
 from telegram import Update
+from telegram.error import TimedOut
 from telegram.ext import (CallbackContext, CommandHandler, Filters,
                           MessageHandler, Updater)
-from telegram.error import TimedOut
+
+from newsauce import newSauceNao
 
 cfgparser = ConfigParser()
 cfgparser.read("config.ini")
@@ -26,11 +29,22 @@ TOKEN = cfgparser["tgbot"]["TOKEN"]
 OWNERID = cfgparser.getint("tgbot", "OWNERID")
 addbkmarkID = cfgparser.getint("tgbot", "ADDBOOKMARKID")
 USE_PROXY = cfgparser.getboolean("tgbot", "use_proxy")
-PROXY_URL = cfgparser["tgbot"]["url"]
+PROXY_URL = cfgparser["tgbot"]["proxy_url"]
 
 _REFRESH_TOKEN = cfgparser["pixiv"]["REFRESH_TOKEN"]
 
 sauceapikey = cfgparser["SauceNAO"]["api_key"]
+
+use_http_proxy = cfgparser.getboolean("http_proxy", "use_proxy")
+defaultport = cfgparser["http_proxy"]["http_proxy_port"]
+
+if use_http_proxy:
+    sauce = newSauceNao(api_key=sauceapikey, proxies={
+        "http": f"http://127.0.0.1:{defaultport}",
+        "https": f"http://127.0.0.1:{defaultport}"
+    })
+else:
+    sauce = SauceNao(api_key=sauceapikey)
 
 path_store = cfgparser["path"]["store"]
 if not os.path.exists(path_store):
@@ -49,7 +63,17 @@ except FileNotFoundError:
         json.dump({}, f, indent=4, ensure_ascii=False)
     searchHistoryMap = {}
 
-
+alters: List[newSauceNao] = [sauce]
+alternum = cfgparser.getint("alternative", "maxalters")
+if alternum > 1 and use_http_proxy:
+    for i in range(2, alternum+1):
+        proxiesPort = cfgparser["alternative"][f"http_proxy_port{i}"]
+        alters.append(
+            newSauceNao(cfgparser["alternative"][f"api_key{i}"], proxies={
+                "http": f"http://127.0.0.1:{proxiesPort}",
+                "https": f"http://127.0.0.1:{proxiesPort}"
+            })
+        )
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
@@ -59,6 +83,28 @@ logger = logging.getLogger(__name__)
 pixivapi: AppPixivAPI = None
 
 searchHistoryMap: Dict[str, List[str]]
+
+
+def iptest(sauce: newSauceNao):
+    resp = requests.get("https://myip.ipip.net/", proxies=sauce.proxies)
+    return resp.content.decode('utf-8')
+
+
+def changeSauce(f: BufferedReader = None) -> Optional[SauceResponse]:
+    global alters, sauce
+    alters = alters[1:]+alters[:1]
+    sauce = alters[0]
+
+    if f is None:
+        return None
+
+    for i in range(5):
+        try:
+            response = sauce.from_file(f)
+        except Exception as e:
+            if i == 4:
+                raise e
+    return response
 
 
 def checkPixivapi() -> bool:
@@ -74,7 +120,13 @@ def renewPixivapi() -> None:
     i = 0
     while i < 5:
         try:
-            pixivapi = AppPixivAPI()
+            if use_http_proxy:
+                pixivapi = AppPixivAPI(proxies={
+                    "http": f"http://127.0.0.1:{defaultport}",
+                    "https": f"http://127.0.0.1:{defaultport}"
+                })
+            else:
+                pixivapi = AppPixivAPI()
             pixivapi.set_accept_language('en-us')
             pixivapi.auth(refresh_token=_REFRESH_TOKEN)
         except:
@@ -131,7 +183,11 @@ def sendResult(update: Update, response, pid: str, results: List[BasicSauce]) ->
         if response.illust.meta_single_page:
             url: str = response.illust.meta_single_page.original_image_url
 
-            pixivapi.download(url, path=path_store)
+            try:
+                pixivapi.download(url, path=path_store)
+            except:
+                update.message.reply_text(
+                    "Failed when downloading, please retry")
 
             fname = os.path.join(path_store, url[url.rfind('/')+1:])
             ans = [fname]
@@ -153,7 +209,12 @@ def sendResult(update: Update, response, pid: str, results: List[BasicSauce]) ->
             ans = []
             for page in response.illust.meta_pages:
                 url = page.image_urls.original
-                pixivapi.download(url, path=path_store)
+
+                try:
+                    pixivapi.download(url, path=path_store)
+                except:
+                    update.message.reply_text(
+                        "Failed when downloading, please retry")
 
                 fname = os.path.join(path_store, url[url.rfind('/')+1:])
                 ans.append(fname)
@@ -255,8 +316,6 @@ def photohandler(update: Update, context: CallbackContext) -> None:
 
     update.message.reply_text("Searching...")
 
-    sauce = SauceNao(api_key=sauceapikey)
-
     tpfilepath = tgphoto(update)
     if tpfilepath in searchHistoryMap:
         sendbyhistory(update, tpfilepath)
@@ -264,12 +323,31 @@ def photohandler(update: Update, context: CallbackContext) -> None:
 
     # Getting result from SauceNAO
     with open(tpfilepath, 'rb') as f:
-        try:
-            response = sauce.from_file(f)
-        except:
-            update.message.reply_text(
-                "Network error when connecting to SauceNAO, please retry. If this happens frequently, maybe the daily search limit exceeded.")
-            return
+        for i in range(5):
+            try:
+                response = sauce.from_file(f)
+            except:
+                if i < 4:
+                    update.message.reply_text(
+                        "Network error when connecting to SauceNAO, retrying...")
+                else:
+                    if alternum > 1 and use_http_proxy:
+                        for i in range(alternum-1):
+                            try:
+                                response = changeSauce(f)
+                            except:
+                                if i == alternum-2:
+                                    update.message.reply_text(
+                                        "Network error when connecting to SauceNAO, please retry. If this happens frequently, maybe the daily search limit exceeded.")
+                                return
+                            else:
+                                break
+                    else:
+                        update.message.reply_text(
+                            "Network error when connecting to SauceNAO, please retry. If this happens frequently, maybe the daily search limit exceeded.")
+                        return
+            else:
+                break
 
     if not(len(response.results) > 0 and response.results[0].similarity > 60):
         update.message.reply_text("No results")
@@ -368,7 +446,7 @@ def texthandler(update: Update, context: CallbackContext) -> None:
         url: str = page.image_urls.original
 
         fname = os.path.join(path_store, url[url.rfind('/')+1:])
-        
+
         i = 0
         while not os.path.exists(fname) and i < 5:
             pixivapi.download(url, path=path_store)
@@ -388,6 +466,28 @@ def stop(update: Update, context: CallbackContext) -> None:
     os.kill(pid, signal.SIGINT)
 
 
+def test(update: Update, context: CallbackContext) -> None:
+    if update.effective_chat.id != OWNERID:
+        return
+
+    if not isinstance(sauce, newSauceNao):
+        update.message.reply_text("Not using proxy, cannot do ip test")
+        return
+
+    update.message.reply_text(iptest(sauce))
+
+
+def switch(update: Update, context: CallbackContext) -> None:
+    if update.effective_chat.id != OWNERID:
+        return
+
+    if not isinstance(sauce, newSauceNao) or alternum < 2:
+        update.message.reply_text("Second proxy not set")
+        return
+
+    changeSauce()
+
+
 def main():
     if USE_PROXY:
         updater = Updater(token=TOKEN,
@@ -396,8 +496,15 @@ def main():
     else:
         updater = Updater(token=TOKEN, use_context=True)
 
+    try:
+        updater.bot.send_message(chat_id=OWNERID, text="Bot is live!")
+    except:
+        ...
+
     updater.dispatcher.add_handler(CommandHandler("start", start))
     updater.dispatcher.add_handler(CommandHandler("help", start))
+    updater.dispatcher.add_handler(CommandHandler("test", test))
+    updater.dispatcher.add_handler(CommandHandler("switch", switch))
     updater.dispatcher.add_handler(CommandHandler("stop", stop))
 
     updater.dispatcher.add_handler(MessageHandler(
