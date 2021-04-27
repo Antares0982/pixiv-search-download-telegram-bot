@@ -16,7 +16,7 @@ pip3 install -r requirements.txt
   * SauceNAO: get your api-key [here](https://saucenao.com/), click "account" to sign in/up.
   * Set up your default proxy if you need. 
   * Choose the paths to store illustrations and temp file from telegram. Also a json file to store search history.
-  * If you need to search many times and frequently exceed the daily search limit, then fill in "alternative" section to use different proxies and SauceNAO api keys.
+  * If you need to search many times and frequently exceed the daily search limit, then fill in "alternative" section to use different proxies and SauceNAO api keys. But first you need to set up your proxies to different ports.
 
 * ```
   python3 main_pixivbot.py
