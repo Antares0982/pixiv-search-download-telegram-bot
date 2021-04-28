@@ -15,6 +15,7 @@ import requests
 from pixivpy3 import *
 from saucenao_api import SauceNao
 from saucenao_api.containers import BasicSauce, SauceResponse
+from saucenao_api.errors import LimitReachedError, LongLimitReachedError, ShortLimitReachedError
 from telegram import Update
 from telegram.error import TimedOut
 from telegram.ext import (CallbackContext, CommandHandler, Filters,
@@ -103,6 +104,7 @@ def changeSauce(f: BufferedReader = None) -> Optional[SauceResponse]:
             response = sauce.from_file(f)
         except Exception as e:
             if i == 4:
+                print(type(e), e)
                 raise e
     return response
 
@@ -309,6 +311,45 @@ def start(update: Update, context: CallbackContext) -> None:
         "GitHub repo:\nhttps://github.com/Antares0982/pixiv-search-download-telegram-bot\nTry to send an illustration or a pixiv id to me!\nWill not receive any group/channel message.")
 
 
+def getsauce(tpfilepath: str) -> SauceResponse:
+    for i in range(5):
+        try:
+            with open(tpfilepath, 'rb') as f:
+                response: SauceResponse = sauce.from_file(f)
+
+        except LimitReachedError as e:
+            if isinstance(e, LongLimitReachedError):
+                if not(alternum > 1 and use_http_proxy):
+                    raise e
+
+                for i in range(alternum-1):
+                    try:
+                        with open(tpfilepath, 'rb') as f:
+                            response: SauceResponse = changeSauce(f)
+                    except Exception as e2:
+                        if i == alternum-2:
+                            raise e2
+                    else:
+                        return response
+
+            if i < 4:
+                time.sleep(20)
+            else:
+                raise e
+
+        except Exception as e:
+            print(type(e), e)
+
+            if i == 4:
+                raise e
+            else:
+                time.sleep(5)
+        else:
+            return response
+
+    raise AssertionError
+
+
 def photohandler(update: Update, context: CallbackContext) -> None:
 
     if update.effective_chat.type != "private":
@@ -322,33 +363,20 @@ def photohandler(update: Update, context: CallbackContext) -> None:
         return
 
     # Getting result from SauceNAO
-    with open(tpfilepath, 'rb') as f:
-        for i in range(5):
-            try:
-                response = sauce.from_file(f)
-            except:
-                if i < 4:
-                    update.message.reply_text(
-                        "Network error when connecting to SauceNAO, retrying...")
-                    time.sleep(10)
-                else:
-                    if alternum > 1 and use_http_proxy:
-                        for i in range(alternum-1):
-                            try:
-                                response = changeSauce(f)
-                            except:
-                                if i == alternum-2:
-                                    update.message.reply_text(
-                                        "Network error when connecting to SauceNAO, please retry. If this happens frequently, maybe the daily search limit exceeded.")
-                                return
-                            else:
-                                break
-                    else:
-                        update.message.reply_text(
-                            "Network error when connecting to SauceNAO, please retry. If this happens frequently, maybe the daily search limit exceeded.")
-                        return
-            else:
-                break
+    try:
+        response = getsauce(tpfilepath)
+    except LongLimitReachedError:
+        update.message.reply_text("Daily search limit exceeded")
+        return
+    except ShortLimitReachedError:
+        update.message.reply_text(
+            "Searching too frequently, please wait for 30 seconds")
+        return
+    except AssertionError:
+        update.message.reply_text("Please check your source code")
+    except Exception as e:
+        update.message.reply_text(f"Unknown error:{type(e)}:{e}")
+        return
 
     if not(len(response.results) > 0 and response.results[0].similarity > 60):
         update.message.reply_text("No results")
@@ -399,7 +427,7 @@ def texthandler(update: Update, context: CallbackContext) -> None:
         return stop(update, context)
 
     try:
-        pidint = int(update.message.text)
+        int(update.message.text)
     except:
         return
 
@@ -475,7 +503,12 @@ def test(update: Update, context: CallbackContext) -> None:
         update.message.reply_text("Not using proxy, cannot do ip test")
         return
 
-    update.message.reply_text(iptest(sauce))
+    rttext = iptest(sauce)
+    while len(rttext) > 500:
+        update.message.reply_text(rttext[:500])
+        rttext = rttext[500:]
+    if rttext:
+        update.message.reply_text(rttext)
 
 
 def switch(update: Update, context: CallbackContext) -> None:
@@ -488,6 +521,7 @@ def switch(update: Update, context: CallbackContext) -> None:
 
     changeSauce()
     update.message.reply_text("Done")
+
 
 def main():
     if USE_PROXY:
