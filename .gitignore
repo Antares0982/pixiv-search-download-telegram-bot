@@ -2,6 +2,8 @@ config.ini
 test.py
 .*
 !.gitignore
+history.json
+nohup.out
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
