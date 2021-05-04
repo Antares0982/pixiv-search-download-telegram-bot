@@ -209,6 +209,12 @@ def sendResult(update: Update, response, pid: str, results: List[BasicSauce]) ->
                         ...
         else:
             ans = []
+            if len(response.illust.meta_pages) >= 10:
+                rttext = f"Too many illustration. Source: https://www.pixiv.net/artworks/{pid}"
+                update.message.reply_text(rttext)
+                ans.append(rttext)
+                return ans
+
             for page in response.illust.meta_pages:
                 url = page.image_urls.original
 
@@ -318,6 +324,7 @@ def getsauce(tpfilepath: str) -> SauceResponse:
                 response: SauceResponse = sauce.from_file(f)
 
         except LimitReachedError as e:
+            print(type(e), e)
             if isinstance(e, LongLimitReachedError):
                 if not(alternum > 1 and use_http_proxy):
                     raise e
@@ -327,6 +334,7 @@ def getsauce(tpfilepath: str) -> SauceResponse:
                         with open(tpfilepath, 'rb') as f:
                             response: SauceResponse = changeSauce(f)
                     except Exception as e2:
+                        print(type(e2), e2)
                         if i == alternum-2:
                             raise e2
                     else:
@@ -377,9 +385,16 @@ def photohandler(update: Update, context: CallbackContext) -> None:
     except Exception as e:
         update.message.reply_text(f"Unknown error:{type(e)}:{e}")
         return
+    except:
+        update.message.reply_text("Unknown error!")
+        return
+
+    if len(response.results) > 1:
+        response.results.sort(key=lambda x: x.similarity, reverse=True)
 
     if not(len(response.results) > 0 and response.results[0].similarity > 60):
-        update.message.reply_text("No results")
+        update.message.reply_text("Low similarity results:"+"\n".join(
+            [result.urls[0]+f" similarity:{result.similarity}" for result in response.results if len(result.urls) > 0]))
         return
 
     pixivids, results = dataprocess(response)
