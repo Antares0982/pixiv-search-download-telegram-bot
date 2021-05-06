@@ -15,8 +15,10 @@ import requests
 from pixivpy3 import *
 from saucenao_api import SauceNao
 from saucenao_api.containers import BasicSauce, SauceResponse
-from saucenao_api.errors import LimitReachedError, LongLimitReachedError, ShortLimitReachedError
+from saucenao_api.errors import (LimitReachedError, LongLimitReachedError,
+                                 ShortLimitReachedError)
 from telegram import Update
+from telegram.bot import Bot
 from telegram.error import TimedOut
 from telegram.ext import (CallbackContext, CommandHandler, Filters,
                           MessageHandler, Updater)
@@ -85,13 +87,15 @@ pixivapi: AppPixivAPI = None
 
 searchHistoryMap: Dict[str, List[str]]
 
+IGNOREHISTORY = False
+
 
 def iptest(sauce: newSauceNao):
     resp = requests.get("https://myip.ipip.net/", proxies=sauce.proxies)
     return resp.content.decode('utf-8')
 
 
-def changeSauce(f: BufferedReader = None) -> Optional[SauceResponse]:
+def changeSauce(bot: Bot, f: BufferedReader = None) -> Optional[SauceResponse]:
     global alters, sauce
     alters = alters[1:]+alters[:1]
     sauce = alters[0]
@@ -106,6 +110,16 @@ def changeSauce(f: BufferedReader = None) -> Optional[SauceResponse]:
             if i == 4:
                 print(type(e), e)
                 raise e
+
+    for i in range(5):
+        try:
+            bot.send_message(
+                chat_id=OWNERID, text=f"Sauce proxy changed to "+sauce.proxies["http"])
+        except:
+            ...
+        else:
+            break
+
     return response
 
 
@@ -317,7 +331,7 @@ def start(update: Update, context: CallbackContext) -> None:
         "GitHub repo:\nhttps://github.com/Antares0982/pixiv-search-download-telegram-bot\nTry to send an illustration or a pixiv id to me!\nWill not receive any group/channel message.")
 
 
-def getsauce(tpfilepath: str) -> SauceResponse:
+def getsauce(tpfilepath: str, context: CallbackContext) -> SauceResponse:
     for i in range(5):
         try:
             with open(tpfilepath, 'rb') as f:
@@ -332,7 +346,8 @@ def getsauce(tpfilepath: str) -> SauceResponse:
                 for i in range(alternum-1):
                     try:
                         with open(tpfilepath, 'rb') as f:
-                            response: SauceResponse = changeSauce(f)
+                            response: SauceResponse = changeSauce(
+                                context.bot, f)
                     except Exception as e2:
                         print(type(e2), e2)
                         if i == alternum-2:
@@ -372,7 +387,7 @@ def photohandler(update: Update, context: CallbackContext) -> None:
 
     # Getting result from SauceNAO
     try:
-        response = getsauce(tpfilepath)
+        response = getsauce(tpfilepath, context)
     except LongLimitReachedError:
         update.message.reply_text("Daily search limit exceeded")
         return
@@ -438,6 +453,12 @@ def texthandler(update: Update, context: CallbackContext) -> None:
     if update.message is None or not update.message.text:
         return
 
+    if update.message == "r":
+        global IGNOREHISTORY
+        IGNOREHISTORY = True
+        update.message.reply_text("Ignoring history now, waiting for input:")
+        return True
+
     if update.message.text == "stop":
         return stop(update, context)
 
@@ -447,7 +468,7 @@ def texthandler(update: Update, context: CallbackContext) -> None:
         return
 
     pid = update.message.text
-    if pid in searchHistoryMap:
+    if pid in searchHistoryMap and not IGNOREHISTORY:
         return sendbyhistory(update, pid)
 
     if not checkPixivapi():
@@ -534,7 +555,7 @@ def switch(update: Update, context: CallbackContext) -> None:
         update.message.reply_text("Second proxy not set")
         return
 
-    changeSauce()
+    changeSauce(context.bot)
     update.message.reply_text("Done")
 
 
