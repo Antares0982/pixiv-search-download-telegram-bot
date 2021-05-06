@@ -381,9 +381,12 @@ def photohandler(update: Update, context: CallbackContext) -> None:
     update.message.reply_text("Searching...")
 
     tpfilepath = tgphoto(update)
-    if tpfilepath in searchHistoryMap:
+    if tpfilepath in searchHistoryMap and not IGNOREHISTORY:
         sendbyhistory(update, tpfilepath)
         return
+
+    global IGNOREHISTORY
+    IGNOREHISTORY = False
 
     # Getting result from SauceNAO
     try:
@@ -453,11 +456,11 @@ def texthandler(update: Update, context: CallbackContext) -> None:
     if update.message is None or not update.message.text:
         return
 
-    if update.message == "r":
+    if update.message.text == "r":
         global IGNOREHISTORY
         IGNOREHISTORY = True
         update.message.reply_text("Ignoring history now, waiting for input:")
-        return True
+        return
 
     if update.message.text == "stop":
         return stop(update, context)
