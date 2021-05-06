@@ -292,6 +292,9 @@ def downloadFromPid(pid: str, index: Optional[int] = None) -> None:
 
 
 def sendbyhistory(update: Update, key: str) -> None:
+    update.message.reply_text(
+        "Found in search history, sending history. If you want to search again, send a letter 'r' to me.")
+
     ans = searchHistoryMap[key]
     if len(ans) == 0:
         update.message.reply_text("no results")
@@ -386,7 +389,7 @@ def photohandler(update: Update, context: CallbackContext) -> None:
     if tpfilepath in searchHistoryMap and not IGNOREHISTORY:
         sendbyhistory(update, tpfilepath)
         return
-    
+
     IGNOREHISTORY = False
 
     # Getting result from SauceNAO
