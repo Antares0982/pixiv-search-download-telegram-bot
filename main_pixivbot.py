@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # This program is dedicated to the public domain under the CC0 license.
-
+import numpy as np
 import json
 import logging
 import os
@@ -566,6 +566,25 @@ def switch(update: Update, context: CallbackContext) -> None:
     update.message.reply_text("Done")
 
 
+def random(update: Update, context: CallbackContext) -> None:
+    if update.effective_chat.type == "channel":
+        return
+
+    files = os.listdir(path_store)
+    while True:
+        ind = np.random.randint(0, len(files))
+        try:
+            int(files[ind][:3])
+        except:
+            continue
+        break
+    pid = files[ind][:files[ind].find('_')]
+
+    with open(os.path.join(path_store, files[ind]), 'rb') as f:
+        update.message.reply_document(
+            f, caption=f"source: https://www.pixiv.net/artworks/{pid}", timeout=120)
+
+
 def main():
     if USE_PROXY:
         updater = Updater(token=TOKEN,
@@ -583,6 +602,7 @@ def main():
     updater.dispatcher.add_handler(CommandHandler("help", start))
     updater.dispatcher.add_handler(CommandHandler("test", test))
     updater.dispatcher.add_handler(CommandHandler("switch", switch))
+    updater.dispatcher.add_handler(CommandHandler("random", random))
     updater.dispatcher.add_handler(CommandHandler("stop", stop))
 
     updater.dispatcher.add_handler(MessageHandler(
