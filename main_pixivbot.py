@@ -89,6 +89,8 @@ searchHistoryMap: Dict[str, List[str]]
 
 IGNOREHISTORY = False
 
+ENABLERANDOM = cfgparser.getboolean("settings", "enable_random")
+
 
 def iptest(sauce: newSauceNao):
     resp = requests.get("https://myip.ipip.net/", proxies=sauce.proxies)
@@ -567,7 +569,7 @@ def switch(update: Update, context: CallbackContext) -> None:
 
 
 def random(update: Update, context: CallbackContext) -> None:
-    if update.effective_chat.type == "channel":
+    if update.effective_chat.type == "channel" or not ENABLERANDOM:
         return
 
     files = os.listdir(path_store)
